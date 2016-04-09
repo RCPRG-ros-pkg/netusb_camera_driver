@@ -1,0 +1,7 @@
+<library path="lib/libnetusb_nodelet">
+  <class name="netusb_camera/driver" type="netusb_camera::NetUSBNodelet" base_class_type="nodelet::Nodelet">
+    <description>
+      A nodelet version of the Net USB camera driver
+    </description>
+  </class>
+</library>
