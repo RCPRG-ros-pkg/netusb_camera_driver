@@ -143,6 +143,8 @@
 #define REG_ROI_ID              27  // (4133CU/BU,4133CU,fpga board cameras)
 #define REG_ROI_CYCLE           28  // (4133CU/BU,4133CU) number of repetitions of the particular roi
 
+#define REG_TRIGGER             29
+
 #define REG_DEFECT_COR          43  // (4133CU/BU,4133CU) DefectPixelCorrection (ON||OFF); OFF(default)
 #define REG_BAD_FRAME           81  // read bad frame count (also possible with ICubeSDK_GetBrokenFrames)
 #define REG_GOOD_FRAME          82  // read good frame count (also possible with ICubeSDK_GetGoodFrames)
@@ -175,9 +177,12 @@
 #define REG_USB_SPEED           118 // 0: usb port is high speed, 1: usb port is super speed capable (useful for super speed camera)
 #define REG_DEVICE_SPEED        119 // 0: camera is high speed, 1: camera is super speed capable
 #define REG_DATA_TRANSMISSION   120 // 0: 8 bit per pixel, 1: 16 bit per pixel in raw mode
+#define REG_SENSOR_TIMING       123 // (4133CU/BU,4133CU)
 #define REG_SIGNIFICANT_BITS    125 // number of significant bits in pixel 
 #define REG_GRAPHIC_MODE        126 // GDI (default)|| D3D 
 #define REG_EDGE_ENHANCEMENT    128 // (ON||OFF) edge enhancement; OFF (default)
 #define REG_EDGE_ENHANCEMENT_GAIN   129 // 0-128 (default 64)
+
+#define PARAM_MAX               129
 
 #endif // NETUSB_DEFS

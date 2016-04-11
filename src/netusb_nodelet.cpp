@@ -10,6 +10,7 @@
 #include <camera_calibration_parsers/parse_ini.h>
 #include <polled_camera/publication_server.h>
 #include <sensor_msgs/CameraInfo.h>
+#include <camera_info_manager/camera_info_manager.h>
 
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/CameraInfo.h>
@@ -20,6 +21,7 @@
 
 #include <netusb_camera_driver/NetUSBCameraConfig.h>
 #include <netusb_camera_driver/netusb_defs.h>
+#include <netusb_camera_driver/netusb_utils.hpp>
 
 #include <NETUSBCAM_API.h>
 
@@ -56,7 +58,9 @@ public:
         NODELET_WARN("Unloaded Net USB camera with id %d", camera_id_);
     }
 
-    NetUSBNodelet()
+    NetUSBNodelet() : 
+        param_info_(PARAM_MAX+1),
+        param_mask_(PARAM_MAX+1, false)
     {
     }
 
@@ -74,12 +78,19 @@ private:
     
     bool video_mode_mask_[10];
     
+    std::vector<PARAM_PROPERTY> param_info_;
+    std::vector<bool> param_mask_;
+    
     ros::Timer update_timer_;
 
     image_transport::CameraPublisher image_publisher_;
     polled_camera::PublicationServer poll_srv_;
     ros::ServiceServer               set_camera_info_srv_;
     ros::Subscriber                  trigger_sub_;
+
+    /** camera calibration information */
+    boost::shared_ptr<camera_info_manager::CameraInfoManager> cinfo_;
+    bool calibration_matches_;            // CameraInfo matches video mode
 
     sensor_msgs::Image img_;
     sensor_msgs::CameraInfo cam_info_;
@@ -120,6 +131,7 @@ private:
         ros::NodeHandle& nh = getNodeHandle();
         ros::NodeHandle& pn = getPrivateNodeHandle();
 
+        cinfo_.reset(new camera_info_manager::CameraInfoManager(nh));
         NODELET_INFO("Initializing NET SDK");
         camera_cnt = NETUSBCAM_Init(); // look for ICubes
         if(camera_cnt == 0) 
@@ -162,7 +174,6 @@ private:
         image_transport::ImageTransport image_it(image_nh);
         image_publisher_ = image_it.advertiseCamera("image_raw", 1);
         poll_srv_ = polled_camera::advertise(nh, "request_image", &NetUSBNodelet::pollCallback, this);
-        set_camera_info_srv_ = pn.advertiseService("set_camera_info", &NetUSBNodelet::setCameraInfo, this);
         trigger_sub_ = pn.subscribe(trig_timestamp_topic_, 1, &NetUSBNodelet::syncInCallback, this);
 
         // Setup dynamic reconfigure server
@@ -185,6 +196,9 @@ private:
             NODELET_ERROR("Error: Open; Result = %d", result);
             return; 
         }
+        
+        
+        result = NETUSBCAM_SetCamParameter(camera_id_, REG_CALLBACK_BR_FRAMES, 1);
 
         char name[20];          // get camera model name
         result = NETUSBCAM_GetName(camera_id_, name, 20);
@@ -225,7 +239,12 @@ private:
 
         NODELET_INFO("Started Net USB camera - id: %d; serial: %s; model: %s", camera_id_, serial, name);
 
+        
+        readAvailableParams();
+        printParams();
+        
         start();
+
     }
 
     std::string getAvailableCameras()
@@ -257,12 +276,9 @@ private:
             result = NETUSBCAM_SetCallback(camera_id_, color_mode_, &GetImageCallback, (void*)this);
             if(result!=0)
             {
-                NODELET_ERROR("Error: SetCallback; Result = %d", result);
+                NODELET_ERROR("Error: SetCallback; Result = %d [%s]", result, err2str(result).c_str());
                 return; 
-            } 
-            
-            
-            
+            }             
 
             // start streaming of camera
             result = NETUSBCAM_Start(camera_id_);
@@ -293,6 +309,40 @@ private:
 
         NETUSBCAM_SetCallback(camera_id_, CALLBACK_RGB, NULL, NULL);
         update_timer_.stop();
+    }
+    
+    void readAvailableParams() {
+        for (int i = 0; i < PARAM_MAX; ++i) {
+            int result = NETUSBCAM_GetCamParameterRange(camera_id_, i, &param_info_[i]);
+            if (result != 0) 
+            {
+                param_info_[i].bEnabled = false;
+                //NODELET_INFO("Param %3d %-25s: %d %s", i, param2str(i).c_str(), result, err2str(result).c_str());
+            } 
+            else 
+            {
+                param_mask_[i] = true;
+                //NODELET_INFO("Param %3d %-25s: OK", i, param2str(i).c_str());
+            }
+        }
+    }
+
+    void printParams() { 
+        for (int i = 0; i < PARAM_MAX; ++i) {
+            if (param_mask_[i])
+            {        
+                NODELET_INFO("Param %3d %-25s: %c%c%c [%u, %u, %lu]",
+                                i, 
+                                param2str(i).c_str(), 
+                                chariftrue(param_info_[i].bEnabled, 'E'),
+                                chariftrue(param_info_[i].bAuto, 'A'),
+                                chariftrue(param_info_[i].bOnePush, 'O'),
+                                param_info_[i].nMin, 
+                                param_info_[i].nDef,
+                                param_info_[i].nMax
+                            );
+            }
+        }
     }
 
     void publishImage(void * buffer, unsigned int buffersize, ros::Time time)
@@ -407,14 +457,21 @@ private:
 
     bool processFrame(void * buffer, unsigned int buffersize, sensor_msgs::Image &img, sensor_msgs::CameraInfo &cam_info)
     {
-        return frameToImage(buffer, buffersize, img);
+        if (buffersize > 0)
+            return frameToImage(buffer, buffersize, img);
+        else
+        {
+            NODELET_ERROR("Frame error");
+            return false;
+        }
+        
     }
 
     bool frameToImage(void * buffer, unsigned int buffersize, sensor_msgs::Image &image)
     {
         std::string encoding;
         if (color_mode_ == CALLBACK_RAW) encoding = "bayer_bggr8";
-        if (color_mode_ == CALLBACK_RGB) encoding = "rgb8";
+        if (color_mode_ == CALLBACK_RGB) encoding = "rgb8"; 
         
         if(buffersize == 0)
             return false;
@@ -483,6 +540,50 @@ private:
         return false;
     }
 
+    bool setParam(int param, int & value) {
+        int result = NETUSBCAM_SetCamParameter(camera_id_, param, value);
+        if(result != 0)
+        {
+            NODELET_ERROR("Setting parameter %s=%d: %s. Proper range [%u, %lu]", param2str(param).c_str(), value, err2str(result).c_str(), param_info_[param].nMin, param_info_[param].nMax);
+            long unsigned int tmp;
+            NETUSBCAM_GetCamParameter(camera_id_, param, &tmp);
+            value = tmp;
+            return false;
+        } 
+        
+        return true;
+    }
+    
+    bool setParam(int param, bool & value) {
+        int result = NETUSBCAM_SetCamParameter(camera_id_, param, value ? 1 : 0);
+        if(result != 0)
+        {
+            NODELET_ERROR("Setting parameter %s=%s: %s. Proper range [%u, %lu]", param2str(param).c_str(), value ? "TRUE" : "FALSE", err2str(result).c_str(), param_info_[param].nMin, param_info_[param].nMax);
+            long unsigned int tmp;
+            NETUSBCAM_GetCamParameter(camera_id_, param, &tmp);
+            value = (tmp == 1);
+            return false;
+        } 
+        
+        return true;
+    }
+    
+    bool setExposure(double & value) {
+        float f_exp = value * 1000;
+        int result = NETUSBCAM_SetExposure(camera_id_, f_exp);
+        if(result != 0)
+        {
+            PARAM_PROPERTY_f exp_range;
+            NETUSBCAM_GetExposureRange(camera_id_, &exp_range);
+            NODELET_ERROR("Setting EXPOSURE=%f: %s. Proper range [%.3f, %.3f]", value, err2str(result).c_str(), exp_range.nMin * 0.001, exp_range.nMax * 0.001);
+            NETUSBCAM_GetExposure(camera_id_, &f_exp);
+            value = f_exp * 0.001;
+            return false;
+        } 
+        
+        return true;
+    }
+
     void reconfigureCallback(netusb_camera_driver::NetUSBCameraConfig &config, uint32_t level)
     {
         NODELET_INFO("Reconfigure request received");
@@ -503,16 +604,13 @@ private:
             NODELET_ERROR("Unsupported video mode [%d]. Ignoring.", config.video_mode);
             config.video_mode = video_mode_;
         }
+
+        setParam(REG_PLL, config.pll);
+        setParam(REG_GAIN, config.gain);
+        setExposure(config.exposure);
         
-        result = NETUSBCAM_SetCamParameter(camera_id_, REG_PLL, config.pll);
-        if(result != 0)
-        {
-            printf("Error: REG_PLL; Result = %d\n", result);
-            long unsigned int cur_pll;
-            NETUSBCAM_GetCamParameter(camera_id_, REG_PLL, &cur_pll);
-            config.pll = cur_pll;
-        } 
-        
+        setParam(REG_DEFECT_COR, config.defect_corretction);
+        setParam(REG_INVERT_PIXEL, config.invert_pixel);
         
   /*      //! Trigger mode
         if (config.trigger_mode == "streaming")

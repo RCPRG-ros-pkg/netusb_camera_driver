@@ -15,6 +15,7 @@ find_package(catkin REQUIRED
    rosconsole
    dynamic_reconfigure 
    camera_calibration_parsers 
+   camera_info_manager
    polled_camera
    nodelet
    nodelet_topic_tools
@@ -129,7 +130,7 @@ include_directories(include)
 # )
 
 
-add_library(netusb_nodelet src/netusb_nodelet.cpp)
+add_library(netusb_nodelet src/netusb_nodelet.cpp src/netusb_utils.cpp)
 target_link_libraries(netusb_nodelet ${catkin_LIBRARIES})
 class_loader_hide_library_symbols(netusb_nodelet)
 
