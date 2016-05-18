@@ -165,25 +165,43 @@ target_link_libraries(netusb_node ${catkin_LIBRARIES} netusb_nodelet)
 # )
 
 ## Mark executables and/or libraries for installation
-# install(TARGETS netusb_camera_driver netusb_camera_driver_node
+ install(TARGETS netusb_node netusb_nodelet
 #   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
+   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+ )
 
 ## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+ install(DIRECTORY include/${PROJECT_NAME}/
+   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
 #   FILES_MATCHING PATTERN "*.h"
 #   PATTERN ".svn" EXCLUDE
-# )
+ )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
-# install(FILES
+ install(DIRECTORY
+plugins/
 #   # myfile1
 #   # myfile2
-#   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-# )
+   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/plugins/
+ )
+
+## Mark other files for installation (e.g. launch and bag files, etc.)
+ install(DIRECTORY
+launch/
+#   # myfile1
+#   # myfile2
+   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch/
+ )
+
+## Mark other files for installation (e.g. launch and bag files, etc.)
+ install(DIRECTORY
+cfg/
+#   # myfile1
+#   # myfile2
+   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/cfg/
+ )
+
 
 #############
 ## Testing ##
