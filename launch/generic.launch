@@ -26,7 +26,7 @@ You can uncomment the viewer at bottom if you want to view the image stream.
 
   <!-- tf frame id associated with this camera -->
   <arg name="frame_id" default="$(arg camera)_optical_frame" />
-
+  <group ns="$(arg camera)">
   <!-- The camera node -->
   <node name="$(arg camera)_driver" pkg="netusb_camera_driver" type="netusb_node" output="screen">
     <remap from="camera" to="$(arg camera)" />
@@ -37,7 +37,7 @@ You can uncomment the viewer at bottom if you want to view the image stream.
   </node>
 
   <!-- If running in polled mode, change ns to match your service call argument. -->
-  <group ns="$(arg camera)">
+  
 
       <!--
       Uncomment below if you want to view the image stream on a monochrome
